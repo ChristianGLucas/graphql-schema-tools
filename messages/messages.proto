@@ -1,0 +1,345 @@
+// This file defines the data contracts (messages) for your Axiom package.
+// Every node's --input and --output refers to a message defined here.
+//
+// Run `axiom create message <Name>` to scaffold a new message below.
+// Run `axiom generate` to compile these definitions into language bindings in gen/.
+//
+// DOCUMENTATION
+//   Comments written directly above a message or field declaration are extracted
+//   automatically at publish time and shown in the Axiom registry as documentation.
+//   Write your descriptions there — no separate doc files needed.
+//
+//   Leading comment  (no blank line before the declaration) → registry description ✓
+//   Detached comment (blank line before the declaration)    → ignored by registry  ✗
+//
+// This file is yours to edit. Axiom only appends new message blocks — it never
+// overwrites or removes content you have written.
+
+syntax = "proto3";
+
+package christiangeorgelucas.graphql_schema_tools;
+
+// A single (line, column) location a parser or validator points to.
+// 1-based, matching the GraphQL spec's own convention. Both fields are 0
+// when no location is available.
+message Location {
+  int32 line = 1;
+  int32 column = 2;
+}
+
+// A single structured GraphQL parse or validation error — never a crash or
+// an opaque exception. `path` is a dot/bracket path into the query
+// document's response shape (e.g. "foo.bar[0]"), set only for
+// field-scoped query-validation errors; empty for schema and syntax errors.
+message GraphQLError {
+  string message = 1;
+  repeated Location locations = 2;
+  string path = 3;
+}
+
+// Canonical input for every node that operates on a schema: the full SDL
+// (Schema Definition Language) text, always supplied as plain text by the
+// caller. Nothing is fetched, introspected over the wire, or cached
+// between calls.
+message SchemaInput {
+  string schema = 1;
+}
+
+// One top-level definition seen while syntactically parsing a schema
+// document — every type/directive/schema-extension definition the parser
+// found, before any semantic (reference-resolution) checking is done.
+message SchemaDefinitionSummary {
+  // Empty for definitions that have no name (e.g. a bare "schema { ... }"
+  // definition or a type extension keeps its target's name here instead).
+  string name = 1;
+  // The raw graphql-js AST node kind, e.g. "ObjectTypeDefinition",
+  // "InterfaceTypeDefinition", "UnionTypeDefinition", "EnumTypeDefinition",
+  // "InputObjectTypeDefinition", "ScalarTypeDefinition", "SchemaDefinition",
+  // "DirectiveDefinition", "ObjectTypeExtension", etc.
+  string ast_kind = 2;
+}
+
+// Output of ParseSchema: a purely syntactic parse (grammar only — it does
+// not check that referenced types exist or that the schema is otherwise
+// semantically sound; use ValidateSchema for that).
+message ParseSchemaResult {
+  bool valid = 1;
+  // Set only when valid is false: one syntax error per parse failure
+  // (graphql-js parsing stops at the first syntax error, so this is
+  // normally a single-element list).
+  repeated GraphQLError errors = 2;
+  // Set only when valid is true: every top-level definition found.
+  repeated SchemaDefinitionSummary definitions = 3;
+}
+
+// Output of ValidateSchema: full semantic well-formedness — type
+// references resolve, no duplicate fields, interfaces are correctly
+// implemented, unions/enums are non-empty, etc. (graphql-js buildSchema +
+// validateSchema).
+message ValidateSchemaResult {
+  bool valid = 1;
+  repeated GraphQLError errors = 2;
+}
+
+// Canonical input for every node that operates on a query/operation
+// document: the full GraphQL query text (one or more operations, plus any
+// fragments), always supplied as plain text by the caller.
+message QueryInput {
+  string query = 1;
+}
+
+// One operation found in a query document.
+message OperationSummary {
+  // Empty for an anonymous operation. A document may contain at most one
+  // anonymous operation, and only when it is the document's sole operation.
+  string name = 1;
+  // "query", "mutation", or "subscription".
+  string operation_type = 2;
+}
+
+// Output of ParseQuery: a purely syntactic parse of a query document (it
+// does not check the document against any schema; use ValidateQuery for
+// that).
+message ParseQueryResult {
+  bool valid = 1;
+  repeated GraphQLError errors = 2;
+  // Set only when valid is true: every operation definition found, in
+  // document order.
+  repeated OperationSummary operations = 3;
+  // Set only when valid is true: the name of every fragment definition
+  // found, in document order.
+  repeated string fragment_names = 4;
+}
+
+// Input for ValidateQuery: a query document checked against a caller-
+// supplied schema.
+message ValidateQueryInput {
+  string schema = 1;
+  string query = 2;
+}
+
+// Output of ValidateQuery: full GraphQL validation of a query document
+// against a schema (unknown fields/types, argument/type mismatches,
+// fragment cycles, etc. — every rule in the GraphQL spec's Validation
+// section, via graphql-js `validate`).
+message ValidateQueryResult {
+  bool valid = 1;
+  // Set only when the schema itself fails to build (schema.errors is used
+  // only in that case); otherwise carries the query's validation errors,
+  // empty when valid is true.
+  repeated GraphQLError errors = 2;
+}
+
+// One named type defined in a schema.
+message TypeSummary {
+  string name = 1;
+  // "OBJECT", "INTERFACE", "UNION", "ENUM", "INPUT_OBJECT", or "SCALAR".
+  string kind = 2;
+  string description = 3;
+}
+
+// Output of ListTypes: every type explicitly defined in the SDL text —
+// GraphQL's five built-in scalars (Int, Float, String, Boolean, ID) and
+// the introspection meta-types ("__Schema" etc.) are excluded, since they
+// were not written by the caller.
+message ListTypesResult {
+  bool valid = 1;
+  // Set only when valid is false (the schema itself does not build); in
+  // that case `types` is empty.
+  string error = 2;
+  repeated TypeSummary types = 3;
+}
+
+// One argument declared on a field.
+message ArgInfo {
+  string name = 1;
+  // The argument's GraphQL type, rendered as SDL type syntax, e.g.
+  // "String!", "[ID!]!", "Int".
+  string type = 2;
+  bool has_default_value = 3;
+  // The default value, JSON-encoded; empty when has_default_value is false.
+  string default_value_json = 4;
+  string description = 5;
+}
+
+// One field declared on an object, interface, or input-object type.
+message FieldInfo {
+  string name = 1;
+  // The field's GraphQL type, rendered as SDL type syntax, e.g.
+  // "[Post!]!", "String", "ID!".
+  string type = 2;
+  // True when the type is not wrapped in GraphQL's "!" (non-null) modifier.
+  bool nullable = 3;
+  // Empty for input-object fields (input fields never take arguments).
+  repeated ArgInfo args = 4;
+  string description = 5;
+  bool is_deprecated = 6;
+  // Empty when is_deprecated is false, or when @deprecated carries no reason.
+  string deprecation_reason = 7;
+}
+
+// Input for GetTypeFields: one named type from a schema.
+message GetTypeFieldsInput {
+  string schema = 1;
+  string type_name = 2;
+}
+
+// Output of GetTypeFields. `error` is set (and `fields` empty) when the
+// schema fails to build, the named type does not exist, or the named type
+// has no fields (a scalar, enum, or union — those are reported by
+// ListEnumValues / ListUnionMembers instead).
+message GetTypeFieldsResult {
+  bool valid = 1;
+  string error = 2;
+  repeated FieldInfo fields = 3;
+}
+
+// Output shared by ListQueries, ListMutations, and ListSubscriptions: the
+// fields (with full argument detail) declared on the schema's Query,
+// Mutation, or Subscription root type, respectively. `fields` is simply
+// empty (not an error) when the schema declares no root type of that
+// kind — Mutation and Subscription are optional per the GraphQL spec.
+message ListOperationFieldsResult {
+  bool valid = 1;
+  // Set only when the schema itself fails to build.
+  string error = 2;
+  repeated FieldInfo fields = 3;
+}
+
+// One value declared on an enum type.
+message EnumValueInfo {
+  string name = 1;
+  string description = 2;
+  bool is_deprecated = 3;
+  string deprecation_reason = 4;
+}
+
+// Input for ListEnumValues: one named enum type from a schema.
+message ListEnumValuesInput {
+  string schema = 1;
+  string type_name = 2;
+}
+
+// Output of ListEnumValues. `error` is set (and `values` empty) when the
+// schema fails to build, the named type does not exist, or the named type
+// is not an enum.
+message ListEnumValuesResult {
+  bool valid = 1;
+  string error = 2;
+  repeated EnumValueInfo values = 3;
+}
+
+// Input for ListInterfaceImplementations: one named interface type from a
+// schema.
+message ListInterfaceImplementationsInput {
+  string schema = 1;
+  string interface_name = 2;
+}
+
+// One type found to implement a given interface.
+message ImplementingType {
+  string name = 1;
+  // "OBJECT" or "INTERFACE" (an interface may itself implement another
+  // interface).
+  string kind = 2;
+}
+
+// Output of ListInterfaceImplementations. `error` is set (and
+// `implementations` empty) when the schema fails to build, the named type
+// does not exist, or the named type is not an interface.
+message ListInterfaceImplementationsResult {
+  bool valid = 1;
+  string error = 2;
+  repeated ImplementingType implementations = 3;
+}
+
+// Input for ListUnionMembers: one named union type from a schema.
+message ListUnionMembersInput {
+  string schema = 1;
+  string union_name = 2;
+}
+
+// Output of ListUnionMembers. `error` is set (and `members` empty) when
+// the schema fails to build, the named type does not exist, or the named
+// type is not a union.
+message ListUnionMembersResult {
+  bool valid = 1;
+  string error = 2;
+  repeated string members = 3;
+}
+
+// Output of PrintSchema: the schema re-serialized into canonical,
+// deterministically-formatted SDL text (graphql-js `printSchema`) — the
+// same text regardless of the input SDL's original formatting/comment
+// placement/definition order for equivalent schemas.
+message PrintSchemaResult {
+  bool valid = 1;
+  string error = 2;
+  string sdl = 3;
+}
+
+// Output of PrintQuery: the query document re-serialized into canonical,
+// deterministically-formatted GraphQL text (graphql-js `print`).
+message PrintQueryResult {
+  bool valid = 1;
+  repeated GraphQLError errors = 2;
+  string formatted_query = 3;
+}
+
+// Output of ExtractOperations: every operation in a (possibly
+// multi-operation) query document, with its name and operation type.
+message ExtractOperationsResult {
+  bool valid = 1;
+  repeated GraphQLError errors = 2;
+  repeated OperationSummary operations = 3;
+}
+
+// Input for ExtractOperationVariables: a query document, and — required
+// only when the document declares more than one operation — which
+// operation's variables to extract.
+message ExtractVariablesInput {
+  string query = 1;
+  // Ignored when the document has exactly one operation (that operation is
+  // used). Required when it has more than one.
+  string operation_name = 2;
+}
+
+// One variable declared by an operation (its `($var: Type = default)`
+// list).
+message VariableInfo {
+  string name = 1;
+  // Rendered as SDL type syntax, e.g. "String!", "[ID!]".
+  string type = 2;
+  bool nullable = 3;
+  bool has_default_value = 4;
+  // JSON-encoded default value; empty when has_default_value is false.
+  string default_value_json = 5;
+}
+
+// Output of ExtractOperationVariables. `error` is set (and `variables`
+// empty) on a parse failure, when operation_name is required but missing
+// or unmatched, or when the named operation does not exist.
+message ExtractVariablesResult {
+  bool valid = 1;
+  string error = 2;
+  repeated VariableInfo variables = 3;
+}
+
+// Output of SchemaSummary: a simple structural census of a schema —
+// counts of types by kind (the same categories as ListTypes.kind) plus
+// the total field count across all object, interface, and input-object
+// types, and which root operation types are declared.
+message SchemaSummaryResult {
+  bool valid = 1;
+  string error = 2;
+  int32 object_count = 3;
+  int32 interface_count = 4;
+  int32 union_count = 5;
+  int32 enum_count = 6;
+  int32 input_object_count = 7;
+  int32 scalar_count = 8;
+  int32 total_field_count = 9;
+  bool has_query_type = 10;
+  bool has_mutation_type = 11;
+  bool has_subscription_type = 12;
+}

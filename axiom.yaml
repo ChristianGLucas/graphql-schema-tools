@@ -1,0 +1,176 @@
+name: christiangeorgelucas/graphql-schema-tools
+version: 0.1.0
+language: typescript
+description: >-
+  Deterministic parsing, validation, and structural inspection of GraphQL
+  schemas (SDL) and GraphQL query/operation documents, wrapping graphql-js
+  (the GraphQL Foundation's reference implementation). Every node is a pure
+  text-in/struct-out transform: the schema or query is always supplied as
+  plain text by the caller, nothing is fetched or introspected over a live
+  API, and there is no randomness, wall-clock use, or persistent state.
+  Covers schema/query parsing, semantic validation, listing types/fields/
+  operations/enum-values/interface-implementations/union-members, canonical
+  pretty-printing, and structural summaries.
+nodes:
+    - name: ParseSchema
+      input: SchemaInput
+      output: ParseSchemaResult
+      description: >-
+        Syntactically parse a GraphQL SDL schema string with graphql-js's
+        `parse`, returning every top-level definition found (types,
+        directives, schema/type extensions) with its AST node kind. Grammar
+        only — it does not check that referenced types exist or resolve; use
+        ValidateSchema for full semantic well-formedness. A malformed schema
+        returns valid=false with a structured, located syntax error instead
+        of throwing.
+    - name: ValidateSchema
+      input: SchemaInput
+      output: ValidateSchemaResult
+      description: >-
+        Build a GraphQL schema from SDL text and run graphql-js's full
+        semantic well-formedness checks (`buildSchema` + `validateSchema`):
+        every referenced type must resolve, interfaces must be correctly
+        implemented, unions/enums must be non-empty, fields must not
+        duplicate, and so on. Returns valid=true, or valid=false with one
+        structured, located error per rule violation.
+    - name: ParseQuery
+      input: QueryInput
+      output: ParseQueryResult
+      description: >-
+        Syntactically parse a GraphQL query/operation document string with
+        graphql-js's `parse`, returning every operation (name + operation
+        type: query/mutation/subscription) and every fragment name found, in
+        document order. Grammar only — it does not check the document
+        against any schema; use ValidateQuery for that. A malformed document
+        returns valid=false with a structured, located syntax error.
+    - name: ValidateQuery
+      input: ValidateQueryInput
+      output: ValidateQueryResult
+      description: >-
+        Validate a GraphQL query/operation document against a caller-
+        supplied SDL schema, running the complete GraphQL Validation spec
+        via graphql-js's `validate`: unknown fields/types/arguments, type
+        mismatches, fragment cycles, undefined variables, and every other
+        validation rule. Returns valid=true, or valid=false with one
+        structured, located error per violation (including a schema-build
+        failure, reported the same way).
+    - name: ListTypes
+      input: SchemaInput
+      output: ListTypesResult
+      description: >-
+        List every type explicitly defined in a schema's SDL text — object,
+        interface, union, enum, input-object, and custom scalar — each with
+        its name, kind, and description. GraphQL's five built-in scalars
+        (Int, Float, String, Boolean, ID) and introspection meta-types are
+        excluded since the caller did not define them. Returns a structured
+        error (not a crash) if the schema itself fails to build.
+    - name: GetTypeFields
+      input: GetTypeFieldsInput
+      output: GetTypeFieldsResult
+      description: >-
+        Extract one named type's fields from a schema — for an object,
+        interface, or input-object type: each field's name, GraphQL type
+        (rendered as SDL syntax, e.g. "[Post!]!"), nullability, arguments
+        (name/type/default/description), description, and deprecation
+        status. Returns a structured error if the schema fails to build, the
+        type does not exist, or the type has no fields (a scalar, enum, or
+        union — use ListEnumValues / ListUnionMembers for those).
+    - name: ListQueries
+      input: SchemaInput
+      output: ListOperationFieldsResult
+      description: >-
+        List every field declared on a schema's Query root type — the API's
+        full set of queries — with the same per-field detail as
+        GetTypeFields (type, nullability, args, description, deprecation).
+        Returns an empty list (not an error) if the schema declares no Query
+        type; returns a structured error only if the schema itself fails to
+        build.
+    - name: ListMutations
+      input: SchemaInput
+      output: ListOperationFieldsResult
+      description: >-
+        List every field declared on a schema's Mutation root type — the
+        API's full set of mutations — with the same per-field detail as
+        GetTypeFields (type, nullability, args, description, deprecation).
+        Mutation is optional per the GraphQL spec, so this returns an empty
+        list (not an error) when the schema declares none; returns a
+        structured error only if the schema itself fails to build.
+    - name: ListSubscriptions
+      input: SchemaInput
+      output: ListOperationFieldsResult
+      description: >-
+        List every field declared on a schema's Subscription root type — the
+        API's full set of subscriptions — with the same per-field detail as
+        GetTypeFields (type, nullability, args, description, deprecation).
+        Subscription is optional per the GraphQL spec, so this returns an
+        empty list (not an error) when the schema declares none; returns a
+        structured error only if the schema itself fails to build.
+    - name: ListEnumValues
+      input: ListEnumValuesInput
+      output: ListEnumValuesResult
+      description: >-
+        List every value declared on one named enum type in a schema — each
+        value's name, description, and deprecation status. Returns a
+        structured error if the schema fails to build, the type does not
+        exist, or the named type is not an enum.
+    - name: ListInterfaceImplementations
+      input: ListInterfaceImplementationsInput
+      output: ListInterfaceImplementationsResult
+      description: >-
+        List every type that implements a named interface in a schema —
+        object types, and any other interface that itself implements this
+        one — each with its name and kind (OBJECT or INTERFACE). Returns a
+        structured error if the schema fails to build, the type does not
+        exist, or the named type is not an interface.
+    - name: ListUnionMembers
+      input: ListUnionMembersInput
+      output: ListUnionMembersResult
+      description: >-
+        List the member object-type names of a named union type in a
+        schema. Returns a structured error if the schema fails to build, the
+        type does not exist, or the named type is not a union.
+    - name: PrintSchema
+      input: SchemaInput
+      output: PrintSchemaResult
+      description: >-
+        Pretty-print a schema back to canonical, deterministically-formatted
+        SDL text using graphql-js's `printSchema` — the same output
+        regardless of the input SDL's original whitespace, comment
+        placement, or definition order for an equivalent schema. Returns a
+        structured error if the schema fails to build.
+    - name: PrintQuery
+      input: QueryInput
+      output: PrintQueryResult
+      description: >-
+        Pretty-print a query/operation document back to canonical,
+        deterministically-formatted GraphQL text using graphql-js's `print`.
+        Returns a structured, located syntax error (not a crash) if the
+        document does not parse.
+    - name: ExtractOperations
+      input: QueryInput
+      output: ExtractOperationsResult
+      description: >-
+        Extract every operation from a (possibly multi-operation) GraphQL
+        query document, each with its name (empty for an anonymous
+        operation) and operation type (query/mutation/subscription), in
+        document order. Returns a structured, located syntax error if the
+        document does not parse.
+    - name: ExtractOperationVariables
+      input: ExtractVariablesInput
+      output: ExtractVariablesResult
+      description: >-
+        Extract the variables one operation declares in its `($var: Type =
+        default)` list — each variable's name, GraphQL type, nullability,
+        and default value (JSON-encoded) when present. `operation_name` is
+        required when the document declares more than one operation, and
+        ignored (the sole operation is used) otherwise. Returns a structured
+        error on a parse failure or an unresolved/missing operation name.
+    - name: SchemaSummary
+      input: SchemaInput
+      output: SchemaSummaryResult
+      description: >-
+        Compute a simple structural census of a schema: counts of types by
+        kind (object/interface/union/enum/input-object/scalar), the total
+        field count across all object, interface, and input-object types,
+        and which of Query/Mutation/Subscription root types are declared.
+        Returns a structured error if the schema fails to build.
