@@ -5,7 +5,7 @@ inspection of GraphQL schemas (SDL — Schema Definition Language) and GraphQL
 query/operation documents, wrapping [graphql-js](https://github.com/graphql/graphql-js)
 (the GraphQL Foundation's reference implementation, MIT).
 
-Built for the [Axiom marketplace](https://axiom.dev) (`christiangeorgelucas/graphql-schema-tools`).
+Built for the [Axiom marketplace](https://axiomide.com) (`christiangeorgelucas/graphql-schema-tools`).
 
 Every node is a pure text-in / struct-out transform: the schema or query is
 always supplied as plain text by the caller. Nothing is fetched, introspected
