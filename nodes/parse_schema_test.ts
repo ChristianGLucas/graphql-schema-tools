@@ -1,7 +1,7 @@
 import { SchemaInput, ParseSchemaResult } from '../gen/messages_pb';
 import { parseSchema } from './parse_schema';
 import { testContext } from './test_helpers';
-import { MAX_INPUT_BYTES, MAX_NESTING_DEPTH } from './graphql_helpers';
+import { MAX_NESTING_DEPTH } from './graphql_helpers';
 
 describe('ParseSchema', () => {
   it('lists every top-level definition with its AST kind (hand-counted from the SDL text)', () => {
@@ -53,12 +53,12 @@ describe('ParseSchema', () => {
     expect(err.getLocationsList()[0].getColumn()).toBe(19);
   });
 
-  it('rejects oversized input with a structured error instead of parsing it', () => {
+  it('handles a large (multi-MB) input without crashing', () => {
     const input = new SchemaInput();
-    input.setSchema('type Query { foo: String }\n' + '#'.repeat(MAX_INPUT_BYTES + 10));
+    input.setSchema('type Query { foo: String }\n' + '#'.repeat(2_000_010));
     const result = parseSchema(testContext, input);
-    expect(result.getValid()).toBe(false);
-    expect(result.getErrorsList()[0].getMessage()).toMatch(/byte limit/);
+    expect(result.getValid()).toBe(true);
+    expect(result.getErrorsList().length).toBe(0);
   });
 
   it('rejects pathologically deep nesting before it ever reaches the parser', () => {

@@ -4,11 +4,11 @@
 //
 // Every caller-supplied schema/query string passes through checkBounds
 // BEFORE it reaches graphql-js's parser — this is the package's guard
-// against a deeply-nested or oversized input driving the parser's
-// recursive descent into a native stack overflow (which cannot be caught
-// as a JS exception) or an unbounded allocation. The scan itself is a
-// single linear pass with no recursion, so it cannot itself be attacked
-// the same way.
+// against a deeply-nested input driving the parser's recursive descent into
+// a native stack overflow (which cannot be caught as a JS exception). The
+// scan itself is a single linear pass with no recursion, so it cannot
+// itself be attacked the same way. Payload size is the platform's concern,
+// not this package's, so there is no byte-size cap here.
 
 import {
   parse,
@@ -39,25 +39,19 @@ import {
   EnumValueInfo,
 } from '../gen/messages_pb';
 
-/** Hard cap on caller-supplied schema/query text, in UTF-8 bytes. */
-export const MAX_INPUT_BYTES = 2_000_000;
-/** Hard cap on simultaneous nesting of {, (, [ in the raw text. */
+/** Hard cap on simultaneous nesting of {, (, [ in the raw text — a
+ * stack-overflow guard for graphql-js's recursive-descent parser, not a
+ * memory/DoS bound. */
 export const MAX_NESTING_DEPTH = 150;
-/** Hard cap on graphql-js's own token count (belt-and-suspenders). */
-export const MAX_PARSE_TOKENS = 200_000;
 
 /**
- * Scan raw GraphQL text for size and nesting-depth bounds BEFORE it is
- * handed to graphql-js. Returns a human-readable rejection reason, or null
- * when the input is within bounds. Single linear pass, no recursion —
- * skips comments (# to end of line) and string/block-string contents so
- * braces inside a string literal don't inflate the count.
+ * Scan raw GraphQL text for a nesting-depth bound BEFORE it is handed to
+ * graphql-js. Returns a human-readable rejection reason, or null when the
+ * input is within bounds. Single linear pass, no recursion — skips comments
+ * (# to end of line) and string/block-string contents so braces inside a
+ * string literal don't inflate the count.
  */
 export function checkBounds(text: string): string | null {
-  const byteLength = Buffer.byteLength(text, 'utf8');
-  if (byteLength > MAX_INPUT_BYTES) {
-    return `Input is ${byteLength} bytes, exceeding the ${MAX_INPUT_BYTES}-byte limit.`;
-  }
   let depth = 0;
   let i = 0;
   const n = text.length;
@@ -134,7 +128,7 @@ export function parseDocumentSafe(text: string): { doc: DocumentNode | null; err
     return { doc: null, error: e };
   }
   try {
-    const doc = parse(text, { maxTokens: MAX_PARSE_TOKENS });
+    const doc = parse(text);
     return { doc, error: null };
   } catch (err) {
     return { doc: null, error: toErrorProto(err) };
@@ -146,7 +140,7 @@ export function buildSchemaSafe(sdl: string): { schema: GraphQLSchema | null; er
   const boundsError = checkBounds(sdl);
   if (boundsError) return { schema: null, error: boundsError };
   try {
-    const schema = buildSchema(sdl, { maxTokens: MAX_PARSE_TOKENS });
+    const schema = buildSchema(sdl);
     return { schema, error: '' };
   } catch (err) {
     return { schema: null, error: err instanceof Error ? err.message : String(err) };

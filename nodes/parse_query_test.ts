@@ -1,7 +1,7 @@
 import { QueryInput } from '../gen/messages_pb';
 import { parseQuery } from './parse_query';
 import { testContext } from './test_helpers';
-import { MAX_INPUT_BYTES, MAX_NESTING_DEPTH } from './graphql_helpers';
+import { MAX_NESTING_DEPTH } from './graphql_helpers';
 
 describe('ParseQuery', () => {
   it('extracts every operation and fragment name from a multi-operation document (hand-counted)', () => {
@@ -42,12 +42,12 @@ describe('ParseQuery', () => {
     expect(result.getErrorsList()[0].getLocationsList().length).toBe(1);
   });
 
-  it('rejects oversized input with a structured error instead of parsing it', () => {
+  it('handles a large (multi-MB) input without crashing', () => {
     const input = new QueryInput();
-    input.setQuery('{ post { title } }\n' + '#'.repeat(MAX_INPUT_BYTES + 10));
+    input.setQuery('{ post { title } }\n' + '#'.repeat(2_000_010));
     const result = parseQuery(testContext, input);
-    expect(result.getValid()).toBe(false);
-    expect(result.getErrorsList()[0].getMessage()).toMatch(/byte limit/);
+    expect(result.getValid()).toBe(true);
+    expect(result.getErrorsList().length).toBe(0);
   });
 
   it('rejects pathologically deep nesting before it ever reaches the parser', () => {
